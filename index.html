@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaTe遊戲 - 搶答模式</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5e7d3;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            text-align: center;
+        }
+        #game-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .card {
+            width: 150px;
+            height: 100px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: white;
+        }
+        .card.selected {
+            border-color: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        #players {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        .player {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .player.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #message {
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            transition-duration: 0.4s;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>MaTe遊戲 - 搶答模式</h1>
+        <div id="setup">
+            <h3>選擇玩家人數：</h3>
+            <select id="playerCount">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <button onclick="startGame()">開始遊戲</button>
+        </div>
+        <div id="game" style="display:none;">
+            <div id="players"></div>
+            <div id="card-grid"></div>
+            <button onclick="getHint()">提示</button>
+            <button onclick="resetGame()">重新開始</button>
+        </div>
+        <div id="message"></div>
+    </div>
+    <script>
+        // 遊戲狀態
+        let gameState = {
+            players: [],
+            deck: [],
+            displayed_cards: [],
+            scores: {},
+            game_over: false,
+            selectedCards: [],
+            selectedPlayer: null
+        };
+
+        // 卡片特徵
+        const COLORS = ['紅', '藍', '綠'];
+        const SHAPES = ['橢圓形', '菱形', '波浪'];
+        const NUMBERS = ['一', '二', '三'];
+        const FILLS = ['實心', '空心', '條紋'];
+
+        function generateDeck() {
+            let deck = [];
+            for (let color of COLORS) {
+                for (let shape of SHAPES) {
+                    for (let number of NUMBERS) {
+                        for (let fill of FILLS) {
+                            deck.push([color, shape, number, fill]);
+                        }
+                    }
+                }
+            }
+            return shuffleArray(deck);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function dealCards(num) {
+            let newCards = gameState.deck.splice(0, num);
+            gameState.displayed_cards = gameState.displayed_cards.concat(newCards);
+        }
+
+        function isSet(cards) {
+            if (cards.length !== 3) return false;
+            for (let i = 0; i < 4; i++) {
+                let feature1 = cards[0][i];
+                let feature2 = cards[1][i];
+                let feature3 = cards[2][i];
+                if (!((feature1 === feature2 && feature2 === feature3) || 
+                      (feature1 !== feature2 && feature2 !== feature3 && feature1 !== feature3))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function findSet() {
+            let cards = gameState.displayed_cards;
+            for (let i = 0; i < cards.length - 2; i++) {
+                for (let j = i + 1; j < cards.length - 1; j++) {
+                    for (let k = j + 1; k < cards.length; k++) {
+                        if (isSet([cards[i], cards[j], cards[k]])) {
+                            return [i, j, k];
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function checkGameOver() {
+            if (gameState.deck.length === 0 && !findSet()) {
+                gameState.game_over = true;
+                let scoresMessage = "遊戲結束！最終得分：\n";
+                for (let player in gameState.scores) {
+                    scoresMessage += `${player}: ${gameState.scores[player]}\n`;
+                }
+                document.getElementById('message').innerHTML = scoresMessage.replace(/\n/g, '<br>');
+            }
+        }
+
+        function startGame() {
+            const numPlayers = document.getElementById('playerCount').value;
+            const animals = ['狗', '貓', '兔', '熊', '鳥', '魚', '鼠', '猴'];
+            gameState.players = shuffleArray(animals).slice(0, numPlayers);
+            gameState.scores = Object.fromEntries(gameState.players.map(p => [p, 0]));
+            gameState.deck = generateDeck();
+            gameState.displayed_cards = [];
+            dealCards(12);
+            gameState.game_over = false;
+            gameState.selectedCards = [];
+            gameState.selectedPlayer = null;
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            updateUI();
+        }
+
+        function updateUI() {
+            // Update players
+            const playersDiv = document.getElementById('players');
+            playersDiv.innerHTML = '';
+            gameState.players.forEach(player => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'player';
+                playerDiv.textContent = `${player}: ${gameState.scores[player]}`;
+                if (player === gameState.selectedPlayer) {
+                    playerDiv.classList.add('active');
+                }
+                playerDiv.onclick = () => selectPlayer(player);
+                playersDiv.appendChild(playerDiv);
+            });
+
+            // Update card grid
+            const cardGrid = document.getElementById('card-grid');
+            cardGrid.innerHTML = '';
+            gameState.displayed_cards.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.innerHTML = createCardSVG(card);
+                cardDiv.onclick = () => selectCard(index);
+                cardGrid.appendChild(cardDiv);
+            });
+
+            // Update message
+            if (!gameState.game_over) {
+                document.getElementById('message').textContent = gameState.selectedPlayer
+                    ? `${gameState.selectedPlayer} 正在選擇卡片`
+                    : "請選擇一位玩家來找SET";
+            }
+        }
+
+        function selectPlayer(player) {
+            if (gameState.game_over) return;
+            if (gameState.selectedPlayer) {
+                document.getElementById('message').textContent = "已經有玩家在選擇卡片了";
+                return;
+            }
+            gameState.selectedPlayer = player;
+            gameState.selectedCards = [];
+            updateUI();
+        }
+
+        function selectCard(index) {
+            if (gameState.game_over || !gameState.selectedPlayer) return;
+            const cardDiv = document.querySelectorAll('.card')[index];
+            cardDiv.classList.toggle('selected');
+            const cardIndex = gameState.selectedCards.indexOf(index);
+            if (cardIndex > -1) {
+                gameState.selectedCards.splice(cardIndex, 1);
+            } else {
+                gameState.selectedCards.push(index);
+            }
+            if (gameState.selectedCards.length === 3) {
+                checkSet();
+            }
+        }
+
+        function checkSet() {
+            const selectedCards = gameState.selectedCards.map(index => gameState.displayed_cards[index]);
+            if (isSet(selectedCards)) {
+                gameState.scores[gameState.selectedPlayer] += 3;
+                for (let index of gameState.selectedCards.sort((a, b) => b - a)) {
+                    gameState.displayed_cards.splice(index, 1);
+                }
+                replenishCards();
+                checkGameOver();
+                document.getElementById('message').textContent = `${gameState.selectedPlayer} 找到了一個SET! 得到3分。`;
+            } else {
+                gameState.scores[gameState.selectedPlayer] -= 1;
+                document.getElementById('message').textContent = `這不是一個有效的SET。${gameState.selectedPlayer} 失去1分。`;
+            }
+            gameState.selectedCards = [];
+            gameState.selectedPlayer = null;
+            updateUI();
+        }
+
+        function replenishCards() {
+            const cardsToAdd = Math.max(0, 12 - gameState.displayed_cards.length);
+            dealCards(cardsToAdd);
+        }
+
+        function getHint() {
+            const set = findSet();
+            if (set) {
+                const hintCardIndex = set[Math.floor(Math.random() * 3)];
+                document.getElementById('message').textContent = 
+                    `提示：卡片 ${hintCardIndex + 1} 是SET中的一張。`;
+            } else {
+                if (gameState.displayed_cards.length === 12 && gameState.deck.length >= 3) {
+                    dealCards(3);
+                    document.getElementById('message').textContent = '沒有可用的SET。已添加3張新卡片。';
+                    updateUI();
+                } else if (gameState.deck.length < 3) {
+                    document.getElementById('message').textContent = '牌堆中沒有足夠的卡片來添加。遊戲可能即將結束。';
+                    checkGameOver();
+                } else {
+                    document.getElementById('message').textContent = '當前已有15張卡片,無需添加。';
+                }
+            }
+        }
+
+        function resetGame() {
+            location.reload();
+        }
+
+        function createCardSVG(card) {
+            const [color, shape, number, fill] = card;
+            const colors = {
+                '紅': '#FF4136',
+                '藍': '#0074D9',
+                '綠': '#2ECC40'
+            };
+            const svgColor = colors[color];
+            
+            let svg = `<svg width="150" height="100" xmlns="http://www.w3.org/2000/svg">
+                <rect width="150" height="100" fill="white" stroke="#CCCCCC" stroke-width="2"/>`;
+            
+            const shapePaths = {
+                '橢圓形': 'M-8 0 A8 20 0 1 1 8 0 A8 20 0 1 1 -8 0',
+                '菱形': 'M0 -20 L8 0 L0 20 L-8 0 Z',
+                '波浪': 'M-8 -20 C-3 -20 -3 -10 -8 0 C-3 10 -3 20 -8 20 L8 20 C3 20 3 10 8 0 C3 -10 3 -20 8 -20 Z'
+            };
+            
+            const count = {'一': 1, '二': 2, '三': 3}[number];
+            const offsets = {1: [0], 2: [-35, 35], 3: [-40, 0, 40]};
+            
+            const group = `<g transform="translate(75, 50)">`;
+            svg += group;
+            
+            for (let offset of offsets[count]) {
+                const path = shapePaths[shape];
+                let shapeElement = `<g transform="translate(${offset}, 0)">`;
+                if (fill === '實心') {
+                    shapeElement += `<path d="${path}" fill="${svgColor}" stroke="${svgColor}"/>`;
+                } else if (fill === '空心') {
+                    shapeElement += `<path d="${path}" fill="none" stroke="${svgColor}" stroke-width="2"/>`;
+                } else {  // 條紋
+                    const patternId = `stripe-${color}-${Math.random().toString(36).substr(2, 9)}`;
+                    shapeElement += `
+                        <defs>
+                            <pattern id="${patternId}" patternUnits="userSpaceOnUse" width="4" height="4">
+                                <path d="M-1,1 l2,-2 M0,4 l4,-4 M3,5 l2,-2" stroke="${svgColor}" stroke-width="1"/>
+                            </pattern>
+                        </defs>
+                        <path d="${path}" fill="url(#${patternId})" stroke="${svgColor}" stroke-width="1"/>
+                    `;
+                }
+                shapeElement += '</g>';
+                svg += shapeElement;
+            }
+            
+            svg += '</g></svg>';
+            return svg;
+        }
+    </script>
+</body>
+</html>
