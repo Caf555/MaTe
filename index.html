@@ -963,6 +963,21 @@
                 return;
             }
 
+            // 線上模式：客戶端發送請求給房主
+            if (gameMode === 'online' && !isHost) {
+                // 客戶端只發送請求，不執行本地操作
+                connections.forEach(conn => {
+                    sendMessage(conn, {
+                        type: 'requestAction',
+                        action: {
+                            actionType: 'selectCard',
+                            index: index
+                        }
+                    });
+                });
+                return;
+            }
+
             const cardDivs = document.querySelectorAll('.card-select');
 
             // 如果已經選中，則取消選中
@@ -981,7 +996,7 @@
                 }
             }
 
-            // 線上模式：廣播卡片選擇動作
+            // 線上模式：房主廣播卡片選擇動作
             if (gameMode === 'online' && isHost) {
                 broadcastMessage({
                     type: 'playerAction',
@@ -1133,6 +1148,21 @@
                 return;
             }
 
+            // 線上模式：客戶端發送請求給房主
+            if (gameMode === 'online' && !isHost) {
+                // 客戶端只發送請求，不執行本地操作
+                connections.forEach(conn => {
+                    sendMessage(conn, {
+                        type: 'requestAction',
+                        action: {
+                            actionType: 'selectPlayer',
+                            player: player
+                        }
+                    });
+                });
+                return;
+            }
+
             activePlayer = player;
             selectedCards = [];
             updatePlayerDisplay();
@@ -1144,7 +1174,7 @@
 
             showMessage(`${player} 正在尋找SET`);
 
-            // 線上模式：廣播玩家選擇動作
+            // 線上模式：房主廣播玩家選擇動作和遊戲狀態
             if (gameMode === 'online' && isHost) {
                 broadcastMessage({
                     type: 'playerAction',
@@ -1664,6 +1694,80 @@
                 case 'playerAction':
                     // 玩家動作
                     handlePlayerAction(data.action);
+                    break;
+
+                case 'requestAction':
+                    // 客戶端請求房主執行操作
+                    if (isHost) {
+                        handleClientRequest(data.action);
+                    }
+                    break;
+            }
+        }
+
+        // 處理客戶端的請求（房主專用）
+        function handleClientRequest(action) {
+            if (!isHost || !gameStarted) return;
+
+            switch(action.actionType) {
+                case 'selectPlayer':
+                    // 執行選擇玩家操作（會自動廣播給所有客戶端）
+                    if (activePlayer && selectedCards.length > 0) {
+                        // 如果有玩家正在選擇，不允許切換
+                        return;
+                    }
+                    activePlayer = action.player;
+                    selectedCards = [];
+                    updatePlayerDisplay();
+                    document.querySelectorAll('.card-select').forEach(card => {
+                        card.classList.remove('selected');
+                    });
+                    showMessage(`${action.player} 正在尋找SET`);
+                    // 廣播給所有客戶端
+                    broadcastMessage({
+                        type: 'playerAction',
+                        action: {
+                            actionType: 'selectPlayer',
+                            player: action.player
+                        }
+                    });
+                    break;
+
+                case 'selectCard':
+                    // 執行選擇卡片操作
+                    if (activePlayer === null || action.index >= displayedCards.length) {
+                        return;
+                    }
+                    const cardDivs = document.querySelectorAll('.card-select');
+                    const selectedIndex = selectedCards.indexOf(action.index);
+                    let wasSelected = false;
+
+                    if (selectedIndex > -1) {
+                        selectedCards.splice(selectedIndex, 1);
+                        cardDivs[action.index].classList.remove('selected');
+                        wasSelected = false;
+                    } else {
+                        if (selectedCards.length < 3) {
+                            selectedCards.push(action.index);
+                            cardDivs[action.index].classList.add('selected');
+                            wasSelected = true;
+                        }
+                    }
+
+                    // 廣播給所有客戶端
+                    broadcastMessage({
+                        type: 'playerAction',
+                        action: {
+                            actionType: 'selectCard',
+                            index: action.index,
+                            selected: wasSelected
+                        }
+                    });
+
+                    // 如果選了三張卡片，檢查SET
+                    if (selectedCards.length === 3) {
+                        setTimeout(checkSet, 300);
+                    }
                     break;
             }
         }
