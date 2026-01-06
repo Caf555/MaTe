@@ -219,21 +219,19 @@
             }
         }
 
-        /* 橫向螢幕 - 卡片網格優化 */
+        /* 橫向螢幕 - 卡片網格優化（列數由JavaScript動態控制） */
         @media (orientation: landscape) and (max-height: 800px) {
             #card-grid {
                 gap: 8px;
                 margin: 8px auto;
-                grid-template-columns: repeat(4, 1fr);
-                max-width: 70%;
+                max-width: 75%;
             }
         }
         @media (orientation: landscape) and (max-height: 600px) {
             #card-grid {
                 gap: 6px;
                 margin: 6px auto;
-                grid-template-columns: repeat(4, 1fr);
-                max-width: 65%;
+                max-width: 70%;
             }
         }
 
@@ -620,12 +618,6 @@
                         <option value="4">4</option>
                         <option value="5">5</option>
                     </select>
-
-                    <label for="difficulty">難度：</label>
-                    <select id="difficulty">
-                        <option value="normal">一般</option>
-                        <option value="hard">困難</option>
-                    </select>
                 </div>
                 <button id="startBtn" onclick="startGame()">開始遊戲</button>
             </div>
@@ -672,11 +664,6 @@
                     </div>
 
                     <div id="gameSettingsOnline" style="display: none;">
-                        <label for="difficultyOnline">難度：</label>
-                        <select id="difficultyOnline">
-                            <option value="normal">一般</option>
-                            <option value="hard">困難</option>
-                        </select>
                         <button id="startOnlineBtn" onclick="startOnlineGame()">開始線上遊戲</button>
                     </div>
                 </div>
@@ -926,15 +913,29 @@
         function updateCardGrid() {
             const grid = document.getElementById('card-grid');
             grid.innerHTML = '';
-            
-            // 計算顯示的卡片數量，正常模式顯示12張，困難模式可顯示15張
-            let gridSize = difficultyMode === 'hard' ? 15 : 12;
+
+            // 計算顯示的卡片數量（固定為一般模式，預設12張）
+            let gridSize = 12;
             gridSize = Math.max(gridSize, displayedCards.length);
-            
+
+            // 根據卡片數量動態設置橫向螢幕的列數
+            const isLandscape = window.matchMedia('(orientation: landscape) and (max-height: 800px)').matches;
+            if (isLandscape) {
+                // 橫向螢幕：12張4列，超過12張5列
+                if (displayedCards.length > 12) {
+                    grid.style.gridTemplateColumns = 'repeat(5, 1fr)';
+                } else {
+                    grid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+                }
+            } else {
+                // 直式螢幕：保持原有設定
+                grid.style.gridTemplateColumns = '';
+            }
+
             for (let i = 0; i < gridSize; i++) {
                 const cardDiv = document.createElement('div');
                 cardDiv.className = 'card-select';
-                
+
                 if (i >= displayedCards.length) {
                     cardDiv.classList.add('hidden');
                 } else {
@@ -942,17 +943,17 @@
                     cardIcon.className = 'card-icon';
                     cardIcon.appendChild(createSVGIcon(displayedCards[i]));
                     cardDiv.appendChild(cardIcon);
-                    
+
                     cardDiv.onclick = (function(index) {
                         return function() { selectCard(index); };
                     })(i);
-                    
+
                     // 如果該卡片已被選中，添加選中樣式
                     if (selectedCards.includes(i)) {
                         cardDiv.classList.add('selected');
                     }
                 }
-                
+
                 grid.appendChild(cardDiv);
             }
         }
@@ -1043,6 +1044,11 @@
             selectedCards = [];
             activePlayer = null;
             updatePlayerDisplay();
+
+            // 本地模式：答題完成後恢復提示功能
+            if (gameMode === 'local') {
+                document.getElementById('hintBtn').disabled = false;
+            }
 
             // 線上模式：廣播遊戲狀態
             if (gameMode === 'online' && isHost) {
@@ -1172,6 +1178,11 @@
                 card.classList.remove('selected');
             });
 
+            // 本地模式：選擇作答者時禁用提示
+            if (gameMode === 'local') {
+                document.getElementById('hintBtn').disabled = true;
+            }
+
             showMessage(`${player} 正在尋找SET`);
 
             // 線上模式：房主廣播玩家選擇動作和遊戲狀態
@@ -1190,8 +1201,8 @@
         function startGame() {
             // 獲取設定
             const playerCount = parseInt(document.getElementById('playerCount').value);
-            difficultyMode = document.getElementById('difficulty').value;
-            
+            difficultyMode = 'normal'; // 固定為一般模式
+
             // 設定玩家列表
             players = [];
             const shuffledNames = [...animalNames].sort(() => Math.random() - 0.5);
@@ -1199,7 +1210,7 @@
                 players.push(shuffledNames[i]);
                 scores[shuffledNames[i]] = 0;
             }
-            
+
             // 初始化遊戲狀態
             generateDeck();
             displayedCards = [];
@@ -1209,10 +1220,9 @@
             extraCardsShown = false;
             hintsUsed = 0;
             setsFound = 0;
-            
-            // 發牌
-            const initialCardCount = difficultyMode === 'hard' ? 15 : 12;
-            dealCards(initialCardCount);
+
+            // 發牌（固定12張）
+            dealCards(12);
             
             // 更新UI
             document.getElementById('setup').style.display = 'none';
@@ -1834,8 +1844,8 @@
                 return;
             }
 
-            // 獲取設定
-            difficultyMode = document.getElementById('difficultyOnline').value;
+            // 固定為一般模式
+            difficultyMode = 'normal';
 
             // 初始化遊戲
             generateDeck();
@@ -1862,14 +1872,13 @@
             hintsUsed = 0;
             setsFound = 0;
 
-            // 發牌
-            const initialCardCount = difficultyMode === 'hard' ? 15 : 12;
-            dealCards(initialCardCount);
+            // 發牌（固定12張）
+            dealCards(12);
 
             // 更新UI
             document.getElementById('setup').style.display = 'none';
             document.getElementById('gameStats').style.display = 'block';
-            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('hintBtn').disabled = true; // 線上模式禁用提示
             document.getElementById('addCardsBtn').disabled = false;
 
             updatePlayerDisplay();
@@ -1899,14 +1908,13 @@
             hintsUsed = 0;
             setsFound = 0;
 
-            // 發牌
-            const initialCardCount = difficultyMode === 'hard' ? 15 : 12;
-            dealCards(initialCardCount);
+            // 發牌（固定12張）
+            dealCards(12);
 
             // 更新UI
             document.getElementById('setup').style.display = 'none';
             document.getElementById('gameStats').style.display = 'block';
-            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('hintBtn').disabled = true; // 線上模式禁用提示
             document.getElementById('addCardsBtn').disabled = false;
 
             updatePlayerDisplay();
@@ -1997,6 +2005,19 @@
                 modal.style.display = 'none';
             }
         };
+
+        // 監聽螢幕方向變化，重新調整版面
+        window.addEventListener('resize', function() {
+            if (gameStarted) {
+                updateCardGrid();
+            }
+        });
+
+        window.addEventListener('orientationchange', function() {
+            if (gameStarted) {
+                setTimeout(updateCardGrid, 100);
+            }
+        });
     })();
     </script>
 </body>
