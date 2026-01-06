@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SET 遊戲</title>
+    <title>SET 遊戲 - 線上對戰版</title>
+    <!-- PeerJS庫 -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         /* 基本樣式 */
         body {
@@ -245,31 +247,172 @@
             color: black;
             text-decoration: none;
         }
+
+        /* 網絡連線樣式 */
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .mode-btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            cursor: pointer;
+            border: 2px solid #3498db;
+            background-color: white;
+            color: #3498db;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .mode-btn.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .network-setup {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #e8f4f8;
+            border-radius: 8px;
+        }
+        .network-setup.show {
+            display: block;
+        }
+        .room-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+        .room-input {
+            padding: 10px;
+            width: 300px;
+            border: 2px solid #bdc3c7;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .connection-status {
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            margin-top: 15px;
+            display: none;
+        }
+        .connection-status.show {
+            display: block;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-indicator.connected {
+            background-color: #2ecc71;
+        }
+        .status-indicator.disconnected {
+            background-color: #e74c3c;
+        }
+        .status-indicator.connecting {
+            background-color: #f39c12;
+        }
+        .player-list {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 5px;
+        }
+        .online-player {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>SET 遊戲 - 增強版</h1>
-        
+        <h1>SET 遊戲 - 線上對戰版</h1>
+
         <!-- 遊戲設定區 -->
         <div id="setup">
-            <h3>遊戲設定</h3>
-            <div>
-                <label for="playerCount">玩家人數：</label>
-                <select id="playerCount">
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                </select>
-                
-                <label for="difficulty">難度：</label>
-                <select id="difficulty">
-                    <option value="normal">一般</option>
-                    <option value="hard">困難</option>
-                </select>
+            <h3>遊戲模式</h3>
+
+            <!-- 模式選擇 -->
+            <div class="mode-selector">
+                <button class="mode-btn active" id="localModeBtn" onclick="selectMode('local')">本地遊戲</button>
+                <button class="mode-btn" id="onlineModeBtn" onclick="selectMode('online')">線上對戰</button>
             </div>
-            <button id="startBtn" onclick="startGame()">開始遊戲</button>
+
+            <!-- 本地遊戲設定 -->
+            <div id="localSetup">
+                <div>
+                    <label for="playerCount">玩家人數：</label>
+                    <select id="playerCount">
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+
+                    <label for="difficulty">難度：</label>
+                    <select id="difficulty">
+                        <option value="normal">一般</option>
+                        <option value="hard">困難</option>
+                    </select>
+                </div>
+                <button id="startBtn" onclick="startGame()">開始遊戲</button>
+            </div>
+
+            <!-- 線上對戰設定 -->
+            <div id="networkSetup" class="network-setup">
+                <div class="room-controls">
+                    <div>
+                        <label for="playerName">您的名稱：</label>
+                        <input type="text" id="playerName" class="room-input" placeholder="輸入您的名稱" maxlength="10">
+                    </div>
+
+                    <div>
+                        <button onclick="createRoom()">創建房間</button>
+                        <span style="margin: 0 10px;">或</span>
+                        <button onclick="showJoinRoom()">加入房間</button>
+                    </div>
+
+                    <div id="joinRoomDiv" style="display: none;">
+                        <input type="text" id="roomId" class="room-input" placeholder="輸入房間ID">
+                        <button onclick="joinRoom()">確認加入</button>
+                    </div>
+
+                    <div id="connectionStatus" class="connection-status">
+                        <div>
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span id="statusText">未連線</span>
+                        </div>
+                        <div id="roomInfo" style="margin-top: 10px; display: none;">
+                            <strong>房間ID：</strong><span id="displayRoomId"></span>
+                            <button onclick="copyRoomId()" style="margin-left: 10px; padding: 5px 10px;">複製</button>
+                        </div>
+                        <div class="player-list" id="onlinePlayerList" style="display: none;">
+                            <strong>已連線玩家：</strong>
+                            <div id="playerListContent"></div>
+                        </div>
+                    </div>
+
+                    <div id="gameSettingsOnline" style="display: none;">
+                        <label for="difficultyOnline">難度：</label>
+                        <select id="difficultyOnline">
+                            <option value="normal">一般</option>
+                            <option value="hard">困難</option>
+                        </select>
+                        <button id="startOnlineBtn" onclick="startOnlineGame()">開始線上遊戲</button>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <!-- 玩家顯示區 -->
@@ -336,10 +479,10 @@
             ['一個', '兩個', '三個'],
             ['實心', '條紋', '空心']
         ];
-        
+
         // 定義玩家名稱選項
         const animalNames = ['貓咪', '狗狗', '兔子', '熊貓', '獅子', '老虎', '猴子', '大象'];
-        
+
         // 遊戲狀態變數
         let deck = [];                // 牌組
         let displayedCards = [];      // 顯示的卡片
@@ -352,6 +495,15 @@
         let difficultyMode = 'normal';// 難度模式
         let hintsUsed = 0;            // 使用提示次數
         let setsFound = 0;            // 找到的SET數量
+
+        // 網絡連線變數
+        let peer = null;              // PeerJS對象
+        let connections = [];         // 連線列表
+        let isHost = false;           // 是否為房主
+        let myPeerId = null;          // 我的Peer ID
+        let myPlayerName = '';        // 我的玩家名稱
+        let onlinePlayers = {};       // 線上玩家 {peerId: playerName}
+        let gameMode = 'local';       // 遊戲模式: 'local' 或 'online'
         
         // SVG圖形路徑 - 統一形狀尺寸，減少寬度避免形狀連在一起
         const shapePaths = {
@@ -542,22 +694,37 @@
             if (!gameStarted || activePlayer === null || index >= displayedCards.length) {
                 return;
             }
-            
+
             const cardDivs = document.querySelectorAll('.card-select');
-            
+
             // 如果已經選中，則取消選中
             const selectedIndex = selectedCards.indexOf(index);
+            let wasSelected = false;
             if (selectedIndex > -1) {
                 selectedCards.splice(selectedIndex, 1);
                 cardDivs[index].classList.remove('selected');
+                wasSelected = false;
             } else {
                 // 如果還未選滿三張，則添加選中
                 if (selectedCards.length < 3) {
                     selectedCards.push(index);
                     cardDivs[index].classList.add('selected');
+                    wasSelected = true;
                 }
             }
-            
+
+            // 線上模式：廣播卡片選擇動作
+            if (gameMode === 'online' && isHost) {
+                broadcastMessage({
+                    type: 'playerAction',
+                    action: {
+                        actionType: 'selectCard',
+                        index: index,
+                        selected: wasSelected
+                    }
+                });
+            }
+
             // 如果已經選中三張卡片，檢查是否構成SET
             if (selectedCards.length === 3) {
                 setTimeout(checkSet, 300);
@@ -567,33 +734,38 @@
         // 檢查是否構成SET
         function checkSet() {
             const cards = selectedCards.map(index => displayedCards[index]);
-            
+
             if (isSet(cards[0], cards[1], cards[2])) {
                 // 有效SET
                 scores[activePlayer] += 3;
                 setsFound++;
                 updateStats();
-                
+
                 // 移除選中卡片並補充新卡片
                 removeAndReplaceCards();
-                
+
                 showMessage(`${activePlayer} 找到了一個有效的SET！得到3分`, 'success');
             } else {
                 // 無效SET
                 scores[activePlayer] = Math.max(0, scores[activePlayer] - 1); // 避免負分
                 showMessage(`這不是一個有效的SET。${activePlayer} 失去1分`, 'error');
-                
+
                 // 重設選中狀態
                 const cardDivs = document.querySelectorAll('.card-select');
                 selectedCards.forEach(index => {
                     cardDivs[index].classList.remove('selected');
                 });
             }
-            
+
             selectedCards = [];
             activePlayer = null;
             updatePlayerDisplay();
-            
+
+            // 線上模式：廣播遊戲狀態
+            if (gameMode === 'online' && isHost) {
+                broadcastGameState();
+            }
+
             // 檢查是否還有可能的SET
             checkForPossibleSets();
         }
@@ -686,23 +858,34 @@
         // 選擇玩家
         function selectPlayer(player) {
             if (!gameStarted) return;
-            
+
             // 如果當前有活躍玩家且已選中卡片，不允許切換
             if (activePlayer && selectedCards.length > 0) {
                 showMessage(`${activePlayer} 正在選擇卡片，請先完成或取消當前選擇`, 'error');
                 return;
             }
-            
+
             activePlayer = player;
             selectedCards = [];
             updatePlayerDisplay();
-            
+
             // 清除所有已選中卡片的樣式
             document.querySelectorAll('.card-select').forEach(card => {
                 card.classList.remove('selected');
             });
-            
+
             showMessage(`${player} 正在尋找SET`);
+
+            // 線上模式：廣播玩家選擇動作
+            if (gameMode === 'online' && isHost) {
+                broadcastMessage({
+                    type: 'playerAction',
+                    action: {
+                        actionType: 'selectPlayer',
+                        player: player
+                    }
+                });
+            }
         }
         
         // 開始遊戲
@@ -877,7 +1060,7 @@
             document.getElementById('message').textContent = '';
             document.getElementById('hintBtn').disabled = true;
             document.getElementById('addCardsBtn').disabled = true;
-            
+
             // 重設遊戲狀態
             players = [];
             deck = [];
@@ -886,7 +1069,30 @@
             activePlayer = null;
             gameStarted = false;
             extraCardsShown = false;
-            
+
+            // 如果是線上模式，關閉連線
+            if (gameMode === 'online') {
+                if (peer) {
+                    connections.forEach(conn => conn.close());
+                    peer.destroy();
+                }
+                peer = null;
+                connections = [];
+                isHost = false;
+                myPeerId = null;
+                myPlayerName = '';
+                onlinePlayers = {};
+                gameMode = 'local';
+
+                // 重置UI
+                document.getElementById('connectionStatus').classList.remove('show');
+                document.getElementById('roomInfo').style.display = 'none';
+                document.getElementById('onlinePlayerList').style.display = 'none';
+                document.getElementById('gameSettingsOnline').style.display = 'none';
+                document.getElementById('joinRoomDiv').style.display = 'none';
+                selectMode('local');
+            }
+
             showMessage('遊戲已重置。請選擇玩家人數並開始新遊戲。');
         }
         
@@ -911,7 +1117,399 @@
         function closeModal() {
             document.getElementById('helpModal').style.display = 'none';
         }
-        
+
+        // ========== 網絡連線功能 ==========
+
+        // 選擇遊戲模式
+        function selectMode(mode) {
+            gameMode = mode;
+            const localBtn = document.getElementById('localModeBtn');
+            const onlineBtn = document.getElementById('onlineModeBtn');
+            const localSetup = document.getElementById('localSetup');
+            const networkSetup = document.getElementById('networkSetup');
+
+            if (mode === 'local') {
+                localBtn.classList.add('active');
+                onlineBtn.classList.remove('active');
+                localSetup.style.display = 'block';
+                networkSetup.classList.remove('show');
+            } else {
+                localBtn.classList.remove('active');
+                onlineBtn.classList.add('active');
+                localSetup.style.display = 'none';
+                networkSetup.classList.add('show');
+            }
+        }
+
+        // 顯示加入房間輸入框
+        function showJoinRoom() {
+            document.getElementById('joinRoomDiv').style.display = 'block';
+        }
+
+        // 創建房間
+        function createRoom() {
+            const playerName = document.getElementById('playerName').value.trim();
+            if (!playerName) {
+                showMessage('請輸入您的名稱', 'error');
+                return;
+            }
+
+            myPlayerName = playerName;
+            isHost = true;
+
+            // 初始化PeerJS
+            updateConnectionStatus('connecting', '正在創建房間...');
+            peer = new Peer();
+
+            peer.on('open', function(id) {
+                myPeerId = id;
+                onlinePlayers[id] = myPlayerName;
+                updateConnectionStatus('connected', '房間已創建');
+                document.getElementById('roomInfo').style.display = 'block';
+                document.getElementById('displayRoomId').textContent = id;
+                document.getElementById('gameSettingsOnline').style.display = 'block';
+                updateOnlinePlayerList();
+            });
+
+            peer.on('connection', function(conn) {
+                handleConnection(conn);
+            });
+
+            peer.on('error', function(err) {
+                console.error('PeerJS錯誤:', err);
+                showMessage('連線錯誤: ' + err.type, 'error');
+                updateConnectionStatus('disconnected', '連線失敗');
+            });
+        }
+
+        // 加入房間
+        function joinRoom() {
+            const playerName = document.getElementById('playerName').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
+
+            if (!playerName) {
+                showMessage('請輸入您的名稱', 'error');
+                return;
+            }
+
+            if (!roomId) {
+                showMessage('請輸入房間ID', 'error');
+                return;
+            }
+
+            myPlayerName = playerName;
+            isHost = false;
+
+            // 初始化PeerJS
+            updateConnectionStatus('connecting', '正在連接房間...');
+            peer = new Peer();
+
+            peer.on('open', function(id) {
+                myPeerId = id;
+                onlinePlayers[id] = myPlayerName;
+
+                // 連接到房主
+                const conn = peer.connect(roomId);
+                handleConnection(conn);
+
+                conn.on('open', function() {
+                    // 發送加入消息
+                    sendMessage(conn, {
+                        type: 'join',
+                        peerId: myPeerId,
+                        playerName: myPlayerName
+                    });
+                    updateConnectionStatus('connected', '已連接到房間');
+                    document.getElementById('roomInfo').style.display = 'block';
+                    document.getElementById('displayRoomId').textContent = roomId;
+                    updateOnlinePlayerList();
+                });
+            });
+
+            peer.on('error', function(err) {
+                console.error('PeerJS錯誤:', err);
+                showMessage('連線錯誤: ' + err.type, 'error');
+                updateConnectionStatus('disconnected', '連線失敗');
+            });
+        }
+
+        // 處理連線
+        function handleConnection(conn) {
+            connections.push(conn);
+
+            conn.on('data', function(data) {
+                handleMessage(data, conn);
+            });
+
+            conn.on('close', function() {
+                // 移除斷開的連線
+                const index = connections.indexOf(conn);
+                if (index > -1) {
+                    connections.splice(index, 1);
+                }
+                // 移除玩家
+                if (data && data.peerId && onlinePlayers[data.peerId]) {
+                    const disconnectedPlayer = onlinePlayers[data.peerId];
+                    delete onlinePlayers[data.peerId];
+                    showMessage(`${disconnectedPlayer} 已離開遊戲`, 'info');
+                    updateOnlinePlayerList();
+                }
+            });
+
+            conn.on('error', function(err) {
+                console.error('連線錯誤:', err);
+            });
+        }
+
+        // 處理收到的消息
+        function handleMessage(data, conn) {
+            console.log('收到消息:', data);
+
+            switch(data.type) {
+                case 'join':
+                    // 新玩家加入
+                    onlinePlayers[data.peerId] = data.playerName;
+                    showMessage(`${data.playerName} 加入了房間`, 'success');
+                    updateOnlinePlayerList();
+
+                    // 如果是房主，廣播玩家列表給所有人
+                    if (isHost) {
+                        broadcastMessage({
+                            type: 'playerList',
+                            players: onlinePlayers
+                        });
+                    }
+                    break;
+
+                case 'playerList':
+                    // 更新玩家列表
+                    onlinePlayers = data.players;
+                    updateOnlinePlayerList();
+                    break;
+
+                case 'startGame':
+                    // 開始遊戲
+                    difficultyMode = data.difficulty;
+                    deck = data.deck;
+                    startOnlineGameForClient();
+                    break;
+
+                case 'gameState':
+                    // 同步遊戲狀態
+                    syncGameState(data.state);
+                    break;
+
+                case 'playerAction':
+                    // 玩家動作
+                    handlePlayerAction(data.action);
+                    break;
+            }
+        }
+
+        // 發送消息
+        function sendMessage(conn, message) {
+            if (conn && conn.open) {
+                conn.send(message);
+            }
+        }
+
+        // 廣播消息給所有連線
+        function broadcastMessage(message) {
+            connections.forEach(conn => {
+                sendMessage(conn, message);
+            });
+        }
+
+        // 更新連線狀態
+        function updateConnectionStatus(status, text) {
+            const statusDiv = document.getElementById('connectionStatus');
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            statusDiv.classList.add('show');
+            indicator.className = 'status-indicator ' + status;
+            statusText.textContent = text;
+        }
+
+        // 更新線上玩家列表
+        function updateOnlinePlayerList() {
+            const listDiv = document.getElementById('onlinePlayerList');
+            const contentDiv = document.getElementById('playerListContent');
+
+            listDiv.style.display = 'block';
+            contentDiv.innerHTML = '';
+
+            for (const peerId in onlinePlayers) {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'online-player';
+                const isMe = peerId === myPeerId;
+                playerDiv.innerHTML = `
+                    <span class="status-indicator connected"></span>
+                    <span>${onlinePlayers[peerId]}${isMe ? ' (你)' : ''}</span>
+                `;
+                contentDiv.appendChild(playerDiv);
+            }
+        }
+
+        // 複製房間ID
+        function copyRoomId() {
+            const roomId = document.getElementById('displayRoomId').textContent;
+            navigator.clipboard.writeText(roomId).then(function() {
+                showMessage('房間ID已複製到剪貼板', 'success');
+            }, function(err) {
+                showMessage('複製失敗，請手動複製', 'error');
+            });
+        }
+
+        // 開始線上遊戲（房主）
+        function startOnlineGame() {
+            if (!isHost) {
+                showMessage('只有房主可以開始遊戲', 'error');
+                return;
+            }
+
+            // 獲取設定
+            difficultyMode = document.getElementById('difficultyOnline').value;
+
+            // 初始化遊戲
+            generateDeck();
+
+            // 廣播遊戲開始消息
+            broadcastMessage({
+                type: 'startGame',
+                difficulty: difficultyMode,
+                deck: deck
+            });
+
+            // 設定玩家列表（使用線上玩家）
+            players = Object.values(onlinePlayers);
+            players.forEach(player => {
+                scores[player] = 0;
+            });
+
+            // 開始遊戲
+            displayedCards = [];
+            selectedCards = [];
+            activePlayer = null;
+            gameStarted = true;
+            extraCardsShown = false;
+            hintsUsed = 0;
+            setsFound = 0;
+
+            // 發牌
+            const initialCardCount = difficultyMode === 'hard' ? 15 : 12;
+            dealCards(initialCardCount);
+
+            // 更新UI
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('gameStats').style.display = 'block';
+            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('addCardsBtn').disabled = false;
+
+            updatePlayerDisplay();
+            updateStats();
+
+            showMessage('線上遊戲開始！', 'success');
+            checkForPossibleSets();
+
+            // 廣播初始遊戲狀態
+            broadcastGameState();
+        }
+
+        // 客戶端開始遊戲
+        function startOnlineGameForClient() {
+            // 設定玩家列表
+            players = Object.values(onlinePlayers);
+            players.forEach(player => {
+                scores[player] = 0;
+            });
+
+            // 開始遊戲
+            displayedCards = [];
+            selectedCards = [];
+            activePlayer = null;
+            gameStarted = true;
+            extraCardsShown = false;
+            hintsUsed = 0;
+            setsFound = 0;
+
+            // 發牌
+            const initialCardCount = difficultyMode === 'hard' ? 15 : 12;
+            dealCards(initialCardCount);
+
+            // 更新UI
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('gameStats').style.display = 'block';
+            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('addCardsBtn').disabled = false;
+
+            updatePlayerDisplay();
+            updateStats();
+
+            showMessage('線上遊戲開始！', 'success');
+        }
+
+        // 廣播遊戲狀態
+        function broadcastGameState() {
+            if (!isHost) return;
+
+            const state = {
+                displayedCards: displayedCards,
+                scores: scores,
+                activePlayer: activePlayer,
+                deck: deck,
+                hintsUsed: hintsUsed,
+                setsFound: setsFound,
+                extraCardsShown: extraCardsShown
+            };
+
+            broadcastMessage({
+                type: 'gameState',
+                state: state
+            });
+        }
+
+        // 同步遊戲狀態
+        function syncGameState(state) {
+            displayedCards = state.displayedCards;
+            scores = state.scores;
+            activePlayer = state.activePlayer;
+            deck = state.deck;
+            hintsUsed = state.hintsUsed;
+            setsFound = state.setsFound;
+            extraCardsShown = state.extraCardsShown;
+
+            updateCardGrid();
+            updatePlayerDisplay();
+            updateStats();
+        }
+
+        // 處理玩家動作
+        function handlePlayerAction(action) {
+            switch(action.actionType) {
+                case 'selectPlayer':
+                    activePlayer = action.player;
+                    selectedCards = [];
+                    updatePlayerDisplay();
+                    document.querySelectorAll('.card-select').forEach(card => {
+                        card.classList.remove('selected');
+                    });
+                    showMessage(`${action.player} 正在尋找SET`);
+                    break;
+
+                case 'selectCard':
+                    // 處理卡片選擇
+                    if (action.selected) {
+                        selectedCards.push(action.index);
+                    } else {
+                        const idx = selectedCards.indexOf(action.index);
+                        if (idx > -1) selectedCards.splice(idx, 1);
+                    }
+                    updateCardGrid();
+                    break;
+            }
+        }
+
         // 將功能暴露給全局
         window.startGame = startGame;
         window.showHint = showHint;
@@ -919,6 +1517,12 @@
         window.resetGame = resetGame;
         window.showHelp = showHelp;
         window.closeModal = closeModal;
+        window.selectMode = selectMode;
+        window.createRoom = createRoom;
+        window.joinRoom = joinRoom;
+        window.showJoinRoom = showJoinRoom;
+        window.copyRoomId = copyRoomId;
+        window.startOnlineGame = startOnlineGame;
         
         // 點擊模態視窗外部關閉
         window.onclick = function(event) {
