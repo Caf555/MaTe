@@ -1412,34 +1412,79 @@
         // 結束遊戲
         function endGame() {
             gameStarted = false;
-            
-            // 找出得分最高的玩家
-            let winner = '';
-            let highestScore = -1;
-            let tie = false;
-            
-            for (const player in scores) {
-                if (scores[player] > highestScore) {
-                    highestScore = scores[player];
-                    winner = player;
-                    tie = false;
-                } else if (scores[player] === highestScore) {
-                    tie = true;
-                }
-            }
-            
-            let endMessage = '遊戲結束！';
-            if (tie) {
-                endMessage += '有多位玩家並列第一！';
+
+            // 找出得分排名
+            const playerScores = players.map(player => ({
+                name: player,
+                score: scores[player] || 0
+            })).sort((a, b) => b.score - a.score);
+
+            // 找出最高分和是否平手
+            const highestScore = playerScores[0].score;
+            const winners = playerScores.filter(p => p.score === highestScore);
+            const isTie = winners.length > 1;
+
+            // 建立結果訊息
+            let resultHTML = '<div style="text-align: center; padding: 20px;">';
+            resultHTML += '<h2 style="color: #2c3e50; margin-bottom: 15px;">🎮 遊戲結束！</h2>';
+
+            // 顯示獲勝者
+            if (isTie) {
+                resultHTML += '<div style="font-size: 18px; color: #e67e22; margin-bottom: 15px;">';
+                resultHTML += `🏆 平手！${winners.map(w => w.name).join('、')} 並列第一`;
+                resultHTML += `<br>得分：${highestScore} 分</div>`;
             } else {
-                endMessage += `贏家是 ${winner}，得分: ${highestScore}。`;
+                resultHTML += '<div style="font-size: 20px; color: #27ae60; margin-bottom: 15px;">';
+                resultHTML += `🏆 優勝者：${winners[0].name}`;
+                resultHTML += `<br>得分：${highestScore} 分</div>`;
             }
-            
-            showMessage(endMessage, 'success');
-            
+
+            // 顯示完整排名
+            resultHTML += '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 10px;">';
+            resultHTML += '<strong>📊 完整排名：</strong><br><br>';
+            playerScores.forEach((p, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '　';
+                const isWinner = p.score === highestScore;
+                const style = isWinner ? 'font-weight: bold; color: #27ae60;' : '';
+                resultHTML += `<div style="margin: 5px 0; ${style}">${medal} ${p.name}：${p.score} 分</div>`;
+            });
+            resultHTML += '</div>';
+
+            // 顯示統計
+            resultHTML += `<div style="margin-top: 15px; font-size: 14px; color: #7f8c8d;">`;
+            resultHTML += `找到 ${setsFound} 個SET`;
+            resultHTML += `</div>`;
+
+            resultHTML += '</div>';
+
+            // 顯示在訊息區域
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = resultHTML;
+            messageDiv.style.background = '#fff';
+            messageDiv.style.border = '2px solid #3498db';
+            messageDiv.style.borderRadius = '10px';
+            messageDiv.style.padding = '0';
+
             // 禁用遊戲按鈕
             document.getElementById('hintBtn').disabled = true;
             document.getElementById('addCardsBtn').disabled = true;
+
+            // 線上模式：廣播遊戲結束
+            if (gameMode === 'online' && isHost) {
+                broadcastMessage({
+                    type: 'gameState',
+                    state: {
+                        displayedCards: displayedCards,
+                        scores: scores,
+                        activePlayer: null,
+                        deck: deck,
+                        hintsUsed: hintsUsed,
+                        setsFound: setsFound,
+                        extraCardsShown: extraCardsShown,
+                        gameEnded: true
+                    }
+                });
+            }
         }
         
         // 重設遊戲
@@ -1448,7 +1493,16 @@
             document.getElementById('gameStats').style.display = 'none';
             document.getElementById('card-grid').innerHTML = '';
             document.getElementById('players').innerHTML = '';
-            document.getElementById('message').textContent = '';
+
+            // 重置訊息區域樣式
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = '';
+            messageDiv.textContent = '';
+            messageDiv.style.background = '';
+            messageDiv.style.border = '';
+            messageDiv.style.borderRadius = '';
+            messageDiv.style.padding = '';
+
             document.getElementById('hintBtn').disabled = true;
             document.getElementById('addCardsBtn').disabled = true;
 
@@ -2039,6 +2093,11 @@
             updateCardGrid();
             updatePlayerDisplay();
             updateStats();
+
+            // 如果遊戲結束，顯示結果
+            if (state.gameEnded) {
+                endGame();
+            }
         }
 
         // 處理玩家動作
