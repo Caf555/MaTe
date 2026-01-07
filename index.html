@@ -65,11 +65,12 @@
                 font-size: 13px;
             }
             #card-grid {
-                gap: 10px;
-                margin: 10px 0;
+                gap: 8px;
+                margin: 8px 0;
             }
             .card-select {
-                padding: 6px;
+                padding: 5px;
+                border-width: 1.5px;
             }
             #message {
                 margin-top: 8px;
@@ -91,10 +92,113 @@
             }
             .stats h3 {
                 font-size: 0.95em;
+                margin-bottom: 5px;
             }
             .stat-item {
                 padding: 6px;
                 font-size: 13px;
+            }
+        }
+
+        /* iPhone 小螢幕特別優化 */
+        @media (orientation: portrait) and (max-width: 430px) {
+            body {
+                padding: 3px;
+            }
+            .container {
+                padding: 5px;
+            }
+            h1 {
+                font-size: 1.1em;
+                margin: 3px 0;
+            }
+            h3 {
+                font-size: 0.9em;
+                margin: 3px 0;
+            }
+            #setup {
+                padding: 8px;
+                margin-bottom: 8px;
+            }
+            #setup label {
+                font-size: 12px;
+            }
+            #setup select {
+                padding: 4px;
+                font-size: 12px;
+            }
+            .mode-btn {
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+            #players {
+                gap: 5px;
+                margin-bottom: 5px;
+            }
+            .player {
+                padding: 4px 8px;
+                font-size: 11px;
+                min-width: 60px;
+            }
+            #card-grid {
+                gap: 6px;
+                margin: 6px 0;
+                max-width: 100%;
+            }
+            .card-select {
+                padding: 3px;
+                border-width: 1px;
+                border-radius: 5px;
+            }
+            .card-icon svg {
+                transform: scale(0.85);
+            }
+            #message {
+                margin-top: 5px;
+                padding: 6px;
+                min-height: 28px;
+                font-size: 11px;
+            }
+            .controls {
+                gap: 4px;
+                margin: 5px 0;
+            }
+            .controls button {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            button {
+                padding: 6px 12px;
+                font-size: 13px;
+                margin: 3px;
+            }
+            .stats {
+                margin-top: 5px;
+                padding: 6px;
+            }
+            .stats h3 {
+                font-size: 0.85em;
+                margin-bottom: 3px;
+            }
+            .stats-grid {
+                gap: 5px;
+            }
+            .stat-item {
+                padding: 4px;
+                font-size: 11px;
+            }
+            .network-setup {
+                padding: 8px;
+            }
+            .room-controls {
+                gap: 8px;
+            }
+            .room-controls > div {
+                font-size: 12px;
+            }
+            .room-input {
+                padding: 5px;
+                font-size: 12px;
             }
         }
 
