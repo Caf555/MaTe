@@ -1892,13 +1892,16 @@
             myPlayerName = playerName;
             isHost = true;
 
-            // 初始化PeerJS
+            // 初始化PeerJS，增加超時和重連設定
             updateConnectionStatus('connecting', '正在創建房間...');
             peer = new Peer({
+                debug: 1,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' }
                     ]
                 }
             });
@@ -1929,6 +1932,37 @@
                 });
             });
 
+            // 處理斷線事件 - 嘗試重新連接
+            peer.on('disconnected', function() {
+                console.log('與伺服器斷開連接，嘗試重新連接...');
+                updateConnectionStatus('connecting', '重新連接中...');
+
+                // 嘗試重新連接，最多嘗試 5 次
+                let reconnectAttempts = 0;
+                const maxReconnectAttempts = 5;
+
+                function attemptReconnect() {
+                    if (reconnectAttempts < maxReconnectAttempts && peer && !peer.destroyed) {
+                        reconnectAttempts++;
+                        console.log(`重新連接嘗試 ${reconnectAttempts}/${maxReconnectAttempts}`);
+                        peer.reconnect();
+
+                        // 如果 3 秒後仍未連接成功，再次嘗試
+                        setTimeout(function() {
+                            if (peer && !peer.open && !peer.destroyed) {
+                                attemptReconnect();
+                            }
+                        }, 3000);
+                    } else if (reconnectAttempts >= maxReconnectAttempts) {
+                        updateConnectionStatus('disconnected', '連接已中斷');
+                        showMessage('連接已中斷，請重新創建房間', 'error');
+                    }
+                }
+
+                // 延遲 1 秒後開始重連
+                setTimeout(attemptReconnect, 1000);
+            });
+
             peer.on('error', function(err) {
                 console.error('PeerJS錯誤:', err);
 
@@ -1937,6 +1971,10 @@
                     errorMsg = '網絡連接失敗，請檢查網絡';
                 } else if (err.type === 'server-error') {
                     errorMsg = '服務器錯誤，請稍後再試';
+                } else if (err.type === 'disconnected') {
+                    // 斷線錯誤，不立即顯示失敗，等待重連
+                    console.log('連接斷開，等待重連...');
+                    return;
                 } else {
                     errorMsg = '創建房間失敗: ' + err.type;
                 }
@@ -1953,6 +1991,8 @@
         }
 
         // 加入房間
+        let currentRoomId = null; // 儲存當前房間 ID 以便重連
+
         function joinRoom() {
             const playerName = document.getElementById('playerName').value.trim();
             const roomId = document.getElementById('roomId').value.trim();
@@ -1969,19 +2009,23 @@
 
             myPlayerName = playerName;
             isHost = false;
+            currentRoomId = roomId; // 儲存房間 ID
 
-            // 初始化PeerJS
+            // 初始化PeerJS，增加 STUN 伺服器
             updateConnectionStatus('connecting', '正在連接房間...');
             peer = new Peer({
+                debug: 1,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' }
                     ]
                 }
             });
 
-            // 設定連接超時
+            // 設定連接超時 - 延長到 30 秒
             let connectionTimeout = setTimeout(function() {
                 if (!connections.length) {
                     showMessage('連接超時，請檢查房間ID是否正確', 'error');
@@ -1989,7 +2033,7 @@
                     if (peer) peer.destroy();
                     peer = null;
                 }
-            }, 10000); // 10秒超時
+            }, 30000); // 30秒超時
 
             peer.on('open', function(id) {
                 myPeerId = id;
@@ -2026,6 +2070,34 @@
                 });
             });
 
+            // 處理斷線事件 - 嘗試重新連接
+            peer.on('disconnected', function() {
+                console.log('與伺服器斷開連接，嘗試重新連接...');
+                updateConnectionStatus('connecting', '重新連接中...');
+
+                let reconnectAttempts = 0;
+                const maxReconnectAttempts = 5;
+
+                function attemptReconnect() {
+                    if (reconnectAttempts < maxReconnectAttempts && peer && !peer.destroyed) {
+                        reconnectAttempts++;
+                        console.log(`重新連接嘗試 ${reconnectAttempts}/${maxReconnectAttempts}`);
+                        peer.reconnect();
+
+                        setTimeout(function() {
+                            if (peer && !peer.open && !peer.destroyed) {
+                                attemptReconnect();
+                            }
+                        }, 3000);
+                    } else if (reconnectAttempts >= maxReconnectAttempts) {
+                        updateConnectionStatus('disconnected', '連接已中斷');
+                        showMessage('連接已中斷，請重新加入房間', 'error');
+                    }
+                }
+
+                setTimeout(attemptReconnect, 1000);
+            });
+
             peer.on('error', function(err) {
                 clearTimeout(connectionTimeout);
                 console.error('PeerJS錯誤:', err);
@@ -2037,6 +2109,10 @@
                     errorMsg = '網絡連接失敗，請檢查網絡';
                 } else if (err.type === 'server-error') {
                     errorMsg = '服務器錯誤，請稍後再試';
+                } else if (err.type === 'disconnected') {
+                    // 斷線錯誤，等待重連
+                    console.log('連接斷開，等待重連...');
+                    return;
                 } else {
                     errorMsg = '連線錯誤: ' + err.type;
                 }
@@ -2533,6 +2609,71 @@
                 setTimeout(updateCardGrid, 100);
             }
         });
+
+        // 頁面可見性變化處理 - 當使用者切換回頁面時嘗試重連
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                console.log('頁面變為可見，檢查連接狀態...');
+
+                if (peer && gameMode === 'online') {
+                    // 檢查 peer 是否仍然連接
+                    if (peer.disconnected && !peer.destroyed) {
+                        console.log('檢測到連接已斷開，嘗試重新連接...');
+                        updateConnectionStatus('connecting', '重新連接中...');
+                        peer.reconnect();
+
+                        // 設定重連超時
+                        setTimeout(function() {
+                            if (peer && peer.open) {
+                                updateConnectionStatus('connected', '已重新連接');
+                                showMessage('已重新連接', 'success');
+                            }
+                        }, 2000);
+                    } else if (peer.open) {
+                        console.log('連接仍然有效');
+                    }
+                }
+            }
+        });
+
+        // 防止頁面在背景時被瀏覽器限制
+        let keepAliveInterval = null;
+
+        function startKeepAlive() {
+            if (keepAliveInterval) return;
+            keepAliveInterval = setInterval(function() {
+                if (peer && peer.open && gameMode === 'online') {
+                    // 發送心跳保持連接
+                    connections.forEach(function(conn) {
+                        if (conn.open) {
+                            try {
+                                sendMessage(conn, { type: 'ping' });
+                            } catch (e) {
+                                console.log('心跳發送失敗:', e);
+                            }
+                        }
+                    });
+                }
+            }, 25000); // 每 25 秒發送一次心跳
+        }
+
+        function stopKeepAlive() {
+            if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+                keepAliveInterval = null;
+            }
+        }
+
+        // 在線上模式啟動時開始心跳
+        const originalSelectMode = selectMode;
+        selectMode = function(mode) {
+            originalSelectMode(mode);
+            if (mode === 'online') {
+                startKeepAlive();
+            } else {
+                stopKeepAlive();
+            }
+        };
     })();
     </script>
 </body>
