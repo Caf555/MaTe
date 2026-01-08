@@ -876,8 +876,20 @@
 
             <!-- 模式選擇 -->
             <div class="mode-selector">
+                <button class="mode-btn" id="practiceModeBtn" onclick="selectMode('practice')">單人練習</button>
                 <button class="mode-btn active" id="localModeBtn" onclick="selectMode('local')">本地遊戲</button>
                 <button class="mode-btn" id="onlineModeBtn" onclick="selectMode('online')">線上對戰</button>
+            </div>
+
+            <!-- 單人練習設定 -->
+            <div id="practiceSetup" style="display: none;">
+                <div style="background-color: #e8f5e9; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 13px;">
+                    <strong>🎯 練習模式說明：</strong><br>
+                    • 無需選擇玩家，直接點選卡片<br>
+                    • 找到 SET 得 1 分，無扣分機制<br>
+                    • 專注練習尋找 SET 的技巧
+                </div>
+                <button id="startPracticeBtn" onclick="startPracticeGame()">開始練習</button>
             </div>
 
             <!-- 本地遊戲設定 -->
@@ -928,6 +940,26 @@
                         <div id="roomInfo" style="margin-top: 10px; display: none;">
                             <strong>房間ID：</strong><span id="displayRoomId"></span>
                             <button onclick="copyRoomId()" style="margin-left: 10px; padding: 5px 10px;">複製</button>
+                        </div>
+                        <div id="shareButtons" style="margin-top: 12px; display: none;">
+                            <strong>📤 分享邀請連結：</strong>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; justify-content: center;">
+                                <button onclick="shareViaLine()" style="background-color: #00B900; padding: 6px 12px; font-size: 13px;">
+                                    LINE
+                                </button>
+                                <button onclick="shareViaFacebook()" style="background-color: #1877F2; padding: 6px 12px; font-size: 13px;">
+                                    Facebook
+                                </button>
+                                <button onclick="shareViaTwitter()" style="background-color: #1DA1F2; padding: 6px 12px; font-size: 13px;">
+                                    Twitter
+                                </button>
+                                <button onclick="shareViaWhatsApp()" style="background-color: #25D366; padding: 6px 12px; font-size: 13px;">
+                                    WhatsApp
+                                </button>
+                                <button onclick="copyInviteLink()" style="background-color: #6c757d; padding: 6px 12px; font-size: 13px;">
+                                    複製連結
+                                </button>
+                            </div>
                         </div>
                         <div class="player-list" id="onlinePlayerList" style="display: none;">
                             <strong>已連線玩家：</strong>
@@ -1293,18 +1325,27 @@
 
             if (isSet(cards[0], cards[1], cards[2])) {
                 // 有效SET
-                scores[activePlayer] += 3;
+                if (gameMode === 'practice') {
+                    scores[activePlayer] += 1; // 練習模式得1分
+                    showMessage(`找到了一個有效的SET！+1分`, 'success');
+                } else {
+                    scores[activePlayer] += 3;
+                    showMessage(`${activePlayer} 找到了一個有效的SET！得到3分`, 'success');
+                }
                 setsFound++;
                 updateStats();
 
                 // 移除選中卡片並補充新卡片
                 removeAndReplaceCards();
-
-                showMessage(`${activePlayer} 找到了一個有效的SET！得到3分`, 'success');
             } else {
                 // 無效SET
-                scores[activePlayer] = Math.max(0, scores[activePlayer] - 1); // 避免負分
-                showMessage(`這不是一個有效的SET。${activePlayer} 失去1分`, 'error');
+                if (gameMode === 'practice') {
+                    // 練習模式無扣分
+                    showMessage(`這不是一個有效的SET，再試試！`, 'error');
+                } else {
+                    scores[activePlayer] = Math.max(0, scores[activePlayer] - 1); // 避免負分
+                    showMessage(`這不是一個有效的SET。${activePlayer} 失去1分`, 'error');
+                }
 
                 // 重設選中狀態
                 const cardDivs = document.querySelectorAll('.card-select');
@@ -1314,8 +1355,15 @@
             }
 
             selectedCards = [];
-            activePlayer = null;
-            updatePlayerDisplay();
+
+            // 練習模式保持玩家選中狀態
+            if (gameMode !== 'practice') {
+                activePlayer = null;
+                updatePlayerDisplay();
+            } else {
+                // 練習模式更新分數顯示
+                updateStats();
+            }
 
             // 本地模式：答題完成後恢復提示功能
             if (gameMode === 'local') {
@@ -1510,7 +1558,45 @@
             // 檢查是否有可能的SET
             checkForPossibleSets();
         }
-        
+
+        // 開始單人練習遊戲
+        function startPracticeGame() {
+            difficultyMode = 'normal';
+
+            // 練習模式：單一玩家
+            players = ['練習者'];
+            scores['練習者'] = 0;
+
+            // 初始化遊戲狀態
+            generateDeck();
+            displayedCards = [];
+            selectedCards = [];
+            activePlayer = '練習者'; // 練習模式自動選擇玩家
+            gameStarted = true;
+            extraCardsShown = false;
+            hintsUsed = 0;
+            setsFound = 0;
+
+            // 發牌（固定12張）
+            dealCards(12);
+
+            // 更新UI
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('gameStats').style.display = 'block';
+            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('addCardsBtn').disabled = false;
+
+            // 練習模式隱藏玩家選擇區
+            document.getElementById('players').style.display = 'none';
+
+            updateStats();
+
+            showMessage('練習模式開始！直接點選卡片尋找SET', 'success');
+
+            // 檢查是否有可能的SET
+            checkForPossibleSets();
+        }
+
         // 提供提示
         function showHint() {
             if (!gameStarted) return;
@@ -1682,6 +1768,7 @@
             document.getElementById('gameStats').style.display = 'none';
             document.getElementById('card-grid').innerHTML = '';
             document.getElementById('players').innerHTML = '';
+            document.getElementById('players').style.display = ''; // 恢復玩家區域顯示
 
             // 重置訊息區域樣式
             const messageDiv = document.getElementById('message');
@@ -1721,13 +1808,18 @@
                 // 重置UI
                 document.getElementById('connectionStatus').classList.remove('show');
                 document.getElementById('roomInfo').style.display = 'none';
+                document.getElementById('shareButtons').style.display = 'none';
                 document.getElementById('onlinePlayerList').style.display = 'none';
                 document.getElementById('gameSettingsOnline').style.display = 'none';
                 document.getElementById('joinRoomDiv').style.display = 'none';
                 selectMode('local');
+            } else if (gameMode === 'practice') {
+                // 練習模式重置
+                gameMode = 'local';
+                selectMode('local');
             }
 
-            showMessage('遊戲已重置。請選擇玩家人數並開始新遊戲。');
+            showMessage('遊戲已重置。請選擇遊戲模式並開始新遊戲。');
         }
         
         // 更新統計數據
@@ -1757,20 +1849,29 @@
         // 選擇遊戲模式
         function selectMode(mode) {
             gameMode = mode;
+            const practiceBtn = document.getElementById('practiceModeBtn');
             const localBtn = document.getElementById('localModeBtn');
             const onlineBtn = document.getElementById('onlineModeBtn');
+            const practiceSetup = document.getElementById('practiceSetup');
             const localSetup = document.getElementById('localSetup');
             const networkSetup = document.getElementById('networkSetup');
 
-            if (mode === 'local') {
+            // 重置所有按鈕和設定區
+            practiceBtn.classList.remove('active');
+            localBtn.classList.remove('active');
+            onlineBtn.classList.remove('active');
+            practiceSetup.style.display = 'none';
+            localSetup.style.display = 'none';
+            networkSetup.classList.remove('show');
+
+            if (mode === 'practice') {
+                practiceBtn.classList.add('active');
+                practiceSetup.style.display = 'block';
+            } else if (mode === 'local') {
                 localBtn.classList.add('active');
-                onlineBtn.classList.remove('active');
                 localSetup.style.display = 'block';
-                networkSetup.classList.remove('show');
-            } else {
-                localBtn.classList.remove('active');
+            } else if (mode === 'online') {
                 onlineBtn.classList.add('active');
-                localSetup.style.display = 'none';
                 networkSetup.classList.add('show');
             }
         }
@@ -1808,6 +1909,7 @@
                 updateConnectionStatus('connected', '房間已創建');
                 document.getElementById('roomInfo').style.display = 'block';
                 document.getElementById('displayRoomId').textContent = id;
+                document.getElementById('shareButtons').style.display = 'block';
                 document.getElementById('gameSettingsOnline').style.display = 'block';
                 updateOnlinePlayerList();
                 showMessage(`房間已創建！房間ID: ${id.substring(0, 8)}...`, 'success');
@@ -2315,8 +2417,85 @@
             }
         }
 
+        // ========== 社群分享功能 ==========
+
+        // 生成邀請連結
+        function getInviteLink() {
+            const baseUrl = window.location.href.split('?')[0];
+            const roomId = document.getElementById('displayRoomId').textContent;
+            return `${baseUrl}?room=${encodeURIComponent(roomId)}`;
+        }
+
+        // 複製邀請連結
+        function copyInviteLink() {
+            const link = getInviteLink();
+            navigator.clipboard.writeText(link).then(() => {
+                showMessage('邀請連結已複製！分享給朋友即可加入', 'success');
+            }).catch(() => {
+                // 備用方法
+                const textArea = document.createElement('textarea');
+                textArea.value = link;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showMessage('邀請連結已複製！', 'success');
+            });
+        }
+
+        // 透過 LINE 分享
+        function shareViaLine() {
+            const link = getInviteLink();
+            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！\n點擊連結加入房間：${link}`);
+            window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(link)}&text=${text}`, '_blank');
+        }
+
+        // 透過 Facebook 分享
+        function shareViaFacebook() {
+            const link = getInviteLink();
+            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`, '_blank');
+        }
+
+        // 透過 Twitter 分享
+        function shareViaTwitter() {
+            const link = getInviteLink();
+            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！點擊連結加入房間：`);
+            window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(link)}`, '_blank');
+        }
+
+        // 透過 WhatsApp 分享
+        function shareViaWhatsApp() {
+            const link = getInviteLink();
+            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！點擊連結加入房間：${link}`);
+            window.open(`https://wa.me/?text=${text}`, '_blank');
+        }
+
+        // 檢查 URL 參數並自動加入房間
+        function checkUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+
+            if (roomId) {
+                // 切換到線上模式
+                selectMode('online');
+
+                // 顯示加入房間輸入框並填入房間 ID
+                document.getElementById('joinRoomDiv').style.display = 'block';
+                document.getElementById('roomId').value = roomId;
+
+                showMessage(`已收到房間邀請！請輸入您的名稱後點擊「確認加入」`, 'info');
+
+                // 清除 URL 參數（避免重新整理時重複觸發）
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // 頁面載入時檢查 URL 參數
+        checkUrlParams();
+
         // 將功能暴露給全局
         window.startGame = startGame;
+        window.startPracticeGame = startPracticeGame;
         window.showHint = showHint;
         window.addCards = addCards;
         window.resetGame = resetGame;
@@ -2327,6 +2506,11 @@
         window.joinRoom = joinRoom;
         window.showJoinRoom = showJoinRoom;
         window.copyRoomId = copyRoomId;
+        window.copyInviteLink = copyInviteLink;
+        window.shareViaLine = shareViaLine;
+        window.shareViaFacebook = shareViaFacebook;
+        window.shareViaTwitter = shareViaTwitter;
+        window.shareViaWhatsApp = shareViaWhatsApp;
         window.startOnlineGame = startOnlineGame;
         
         // 點擊模態視窗外部關閉
