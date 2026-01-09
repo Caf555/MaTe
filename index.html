@@ -1040,6 +1040,11 @@
                         <div>
                             <span class="status-indicator" id="statusIndicator"></span>
                             <span id="statusText">未連線</span>
+                            <span id="connectionQuality" style="margin-left: 10px; font-size: 12px; color: #666;"></span>
+                        </div>
+                        <div id="connectionMonitor" style="margin-top: 8px; font-size: 11px; color: #888; display: none;">
+                            <span>延遲: <span id="pingDisplay">--</span>ms</span>
+                            <span style="margin-left: 15px;">連線數: <span id="connectionCount">0</span></span>
                         </div>
                         <div id="roomInfo" style="margin-top: 10px; display: none;">
                             <strong>房間ID：</strong><span id="displayRoomId"></span>
@@ -1167,6 +1172,16 @@
         let myPlayerName = '';        // 我的玩家名稱
         let onlinePlayers = {};       // 線上玩家 {peerId: playerName}
         let gameMode = 'local';       // 遊戲模式: 'local' 或 'online'
+
+        // 連線監控變數
+        let lastPingTime = 0;         // 上次 ping 時間
+        let currentPing = 0;          // 當前延遲
+        let pingInterval = null;      // ping 定時器
+        let connectionHealthy = true; // 連線健康狀態
+
+        // 線上對戰 - 多人同時解題
+        let activePlayers = {};       // 正在解題的玩家 {playerName: {cards: [], timestamp: Date}}
+        let playerSelectedCards = {}; // 每個玩家選擇的卡片 {playerName: [cardIndices]}
         
         // SVG圖形路徑 - 統一形狀尺寸，減少寬度避免形狀連在一起
         const shapePaths = {
@@ -1368,22 +1383,19 @@
         
         // 選擇卡片
         function selectCard(index) {
-            if (!gameStarted || activePlayer === null || index >= displayedCards.length) {
+            if (!gameStarted || index >= displayedCards.length) {
                 return;
             }
 
-            // 線上模式：客戶端發送請求給房主
-            if (gameMode === 'online' && !isHost) {
-                // 客戶端只發送請求，不執行本地操作
-                connections.forEach(conn => {
-                    sendMessage(conn, {
-                        type: 'requestAction',
-                        action: {
-                            actionType: 'selectCard',
-                            index: index
-                        }
-                    });
-                });
+            // 線上模式：多人同時解題
+            if (gameMode === 'online') {
+                selectCardOnline(index);
+                return;
+            }
+
+            // 本地/練習模式：需要先選擇玩家
+            if (activePlayer === null) {
+                showMessage('請先選擇一位玩家', 'error');
                 return;
             }
 
@@ -1391,36 +1403,205 @@
 
             // 如果已經選中，則取消選中
             const selectedIndex = selectedCards.indexOf(index);
-            let wasSelected = false;
             if (selectedIndex > -1) {
                 selectedCards.splice(selectedIndex, 1);
                 cardDivs[index].classList.remove('selected');
-                wasSelected = false;
             } else {
                 // 如果還未選滿三張，則添加選中
                 if (selectedCards.length < 3) {
                     selectedCards.push(index);
                     cardDivs[index].classList.add('selected');
-                    wasSelected = true;
                 }
-            }
-
-            // 線上模式：房主廣播卡片選擇動作
-            if (gameMode === 'online' && isHost) {
-                broadcastMessage({
-                    type: 'playerAction',
-                    action: {
-                        actionType: 'selectCard',
-                        index: index,
-                        selected: wasSelected
-                    }
-                });
             }
 
             // 如果已經選中三張卡片，檢查是否構成SET
             if (selectedCards.length === 3) {
                 setTimeout(checkSet, 300);
             }
+        }
+
+        // 線上模式選擇卡片 - 支援多人同時解題
+        function selectCardOnline(index) {
+            const playerName = myPlayerName;
+
+            // 初始化該玩家的選擇狀態
+            if (!playerSelectedCards[playerName]) {
+                playerSelectedCards[playerName] = [];
+            }
+
+            const myCards = playerSelectedCards[playerName];
+            const cardIndex = myCards.indexOf(index);
+            let action = '';
+
+            if (cardIndex > -1) {
+                // 取消選中
+                myCards.splice(cardIndex, 1);
+                action = 'deselect';
+
+                // 如果沒有選中任何卡片，從活躍玩家中移除
+                if (myCards.length === 0) {
+                    delete activePlayers[playerName];
+                }
+            } else {
+                // 選中新卡片（最多3張）
+                if (myCards.length < 3) {
+                    myCards.push(index);
+                    action = 'select';
+
+                    // 標記為活躍玩家
+                    if (!activePlayers[playerName]) {
+                        activePlayers[playerName] = { timestamp: Date.now() };
+                    }
+                }
+            }
+
+            // 更新本地顯示
+            updateOnlineCardDisplay();
+            updateOnlinePlayerHighlight();
+
+            // 發送動作到房主/廣播給其他玩家
+            if (isHost) {
+                // 房主直接處理並廣播
+                broadcastMessage({
+                    type: 'cardSelection',
+                    playerName: playerName,
+                    cards: myCards,
+                    action: action,
+                    index: index
+                });
+
+                // 檢查是否完成SET
+                if (myCards.length === 3) {
+                    setTimeout(() => checkSetOnline(playerName), 300);
+                }
+            } else {
+                // 客戶端發送給房主
+                connections.forEach(conn => {
+                    sendMessage(conn, {
+                        type: 'cardSelection',
+                        playerName: playerName,
+                        cards: myCards,
+                        action: action,
+                        index: index
+                    });
+                });
+            }
+        }
+
+        // 更新線上模式卡片顯示
+        function updateOnlineCardDisplay() {
+            const cardDivs = document.querySelectorAll('.card-select');
+
+            // 清除所有選中樣式
+            cardDivs.forEach(card => {
+                card.classList.remove('selected');
+                card.style.boxShadow = '';
+            });
+
+            // 為每個玩家的選擇添加樣式
+            const playerColors = ['#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f39c12'];
+            let colorIndex = 0;
+
+            for (const playerName in playerSelectedCards) {
+                const cards = playerSelectedCards[playerName];
+                const color = playerColors[colorIndex % playerColors.length];
+
+                cards.forEach(cardIdx => {
+                    if (cardDivs[cardIdx]) {
+                        if (playerName === myPlayerName) {
+                            cardDivs[cardIdx].classList.add('selected');
+                        } else {
+                            // 其他玩家的選擇用不同顏色邊框
+                            cardDivs[cardIdx].style.boxShadow = `0 0 8px ${color}`;
+                        }
+                    }
+                });
+                colorIndex++;
+            }
+        }
+
+        // 更新線上玩家高亮顯示
+        function updateOnlinePlayerHighlight() {
+            const playerDiv = document.getElementById('players');
+            if (!playerDiv) return;
+
+            const playerButtons = playerDiv.querySelectorAll('.player');
+            playerButtons.forEach(btn => {
+                const playerName = btn.textContent.split(':')[0];
+                if (activePlayers[playerName]) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // 線上模式檢查SET
+        function checkSetOnline(playerName) {
+            if (!playerSelectedCards[playerName] || playerSelectedCards[playerName].length !== 3) {
+                return;
+            }
+
+            const cardIndices = playerSelectedCards[playerName];
+            const cards = cardIndices.map(index => displayedCards[index]);
+
+            if (isSet(cards[0], cards[1], cards[2])) {
+                // 有效SET - 該玩家得分
+                if (!scores[playerName]) scores[playerName] = 0;
+                scores[playerName] += 3;
+                setsFound++;
+
+                // 保存要移除的卡片索引
+                selectedCards = [...cardIndices];
+
+                // 清除所有玩家的選擇（因為卡片要被移除）
+                clearAllPlayerSelections();
+
+                // 移除選中卡片並補充新卡片
+                removeAndReplaceCards();
+
+                showMessage(`${playerName} 找到了一個有效的SET！得到3分`, 'success');
+
+                // 廣播結果
+                if (isHost) {
+                    broadcastGameState();
+                }
+
+                updateStats();
+                checkForPossibleSets();
+            } else {
+                // 無效SET
+                if (!scores[playerName]) scores[playerName] = 0;
+                scores[playerName] = Math.max(0, scores[playerName] - 1);
+
+                showMessage(`${playerName} 選擇了無效的SET，失去1分`, 'error');
+
+                // 清除該玩家的選擇
+                playerSelectedCards[playerName] = [];
+                delete activePlayers[playerName];
+
+                updateOnlineCardDisplay();
+                updateOnlinePlayerHighlight();
+
+                // 廣播狀態
+                if (isHost) {
+                    broadcastMessage({
+                        type: 'invalidSet',
+                        playerName: playerName
+                    });
+                    broadcastGameState();
+                }
+            }
+
+            updatePlayerDisplay();
+        }
+
+        // 清除所有玩家的選擇
+        function clearAllPlayerSelections() {
+            playerSelectedCards = {};
+            activePlayers = {};
+            updateOnlineCardDisplay();
+            updateOnlinePlayerHighlight();
         }
         
         // 檢查是否構成SET
@@ -1897,6 +2078,7 @@
 
             // 如果是線上模式，關閉連線
             if (gameMode === 'online') {
+                stopConnectionMonitoring();
                 if (peer) {
                     connections.forEach(conn => conn.close());
                     peer.destroy();
@@ -2020,6 +2202,7 @@
                 document.getElementById('gameSettingsOnline').style.display = 'block';
                 updateOnlinePlayerList();
                 showMessage(`房間已創建！房間ID: ${id.substring(0, 8)}...`, 'success');
+                startConnectionMonitoring();
             });
 
             peer.on('connection', function(conn) {
@@ -2164,6 +2347,7 @@
                     document.getElementById('displayRoomId').textContent = roomId;
                     updateOnlinePlayerList();
                     showMessage(`成功加入房間！`, 'success');
+                    startConnectionMonitoring();
                 });
 
                 conn.on('error', function(err) {
@@ -2318,6 +2502,67 @@
                     // 客戶端請求房主執行操作
                     if (isHost) {
                         handleClientRequest(data.action);
+                    }
+                    break;
+
+                case 'cardSelection':
+                    // 處理其他玩家的卡片選擇（線上多人同時解題）
+                    if (data.playerName !== myPlayerName) {
+                        playerSelectedCards[data.playerName] = data.cards || [];
+                        if (data.cards && data.cards.length > 0) {
+                            activePlayers[data.playerName] = { timestamp: Date.now() };
+                        } else {
+                            delete activePlayers[data.playerName];
+                        }
+                        updateOnlineCardDisplay();
+                        updateOnlinePlayerHighlight();
+                    }
+
+                    // 房主處理客戶端的選擇
+                    if (isHost && data.playerName !== myPlayerName) {
+                        // 廣播給其他玩家
+                        broadcastMessage({
+                            type: 'cardSelection',
+                            playerName: data.playerName,
+                            cards: data.cards,
+                            action: data.action,
+                            index: data.index
+                        });
+
+                        // 檢查是否完成SET
+                        if (data.cards && data.cards.length === 3) {
+                            setTimeout(() => checkSetOnline(data.playerName), 300);
+                        }
+                    }
+                    break;
+
+                case 'invalidSet':
+                    // 其他玩家的無效SET
+                    if (data.playerName !== myPlayerName) {
+                        playerSelectedCards[data.playerName] = [];
+                        delete activePlayers[data.playerName];
+                        updateOnlineCardDisplay();
+                        updateOnlinePlayerHighlight();
+                    }
+                    break;
+
+                case 'clearSelections':
+                    // 清除所有選擇（有人找到SET後）
+                    clearAllPlayerSelections();
+                    break;
+
+                case 'ping':
+                    // 回應 ping
+                    if (conn && conn.open) {
+                        sendMessage(conn, { type: 'pong', timestamp: data.timestamp });
+                    }
+                    break;
+
+                case 'pong':
+                    // 收到 pong，計算延遲
+                    if (data.timestamp) {
+                        currentPing = Date.now() - data.timestamp;
+                        updateConnectionMonitor();
                     }
                     break;
             }
@@ -2637,51 +2882,126 @@
             });
         }
 
-        // 透過 LINE 分享 (使用 line.me/R/share 可以傳送文字訊息)
-        function shareViaLine() {
+        // 分享前保持連線的處理
+        function prepareForShare() {
+            // 先複製邀請訊息到剪貼簿作為備份
             const link = getInviteLink();
             const msg = getInviteMessage();
-            // LINE 分享格式：文字 + 連結
             const text = `${msg.title}\n\n${msg.description}\n${link}`;
+
+            navigator.clipboard.writeText(text).catch(() => {});
+
+            // 顯示提示
+            showMessage('邀請訊息已複製到剪貼簿，若分享失敗可直接貼上', 'info');
+
+            return { link, msg, text };
+        }
+
+        // 透過 LINE 分享 (使用 line.me/R/share 可以傳送文字訊息)
+        function shareViaLine() {
+            const { text } = prepareForShare();
             // 使用 line.me/R/share 可以直接傳送文字訊息
             window.open(`https://line.me/R/share?text=${encodeURIComponent(text)}`, '_blank');
         }
 
         // 透過 Facebook Messenger 分享
         function shareViaFacebook() {
-            const link = getInviteLink();
-            const msg = getInviteMessage();
-            const text = `${msg.title}\n\n${msg.description}\n${link}`;
-            // Facebook Messenger 使用 fb-messenger://share 協議
-            // 先複製訊息到剪貼簿，再開啟 Messenger
-            navigator.clipboard.writeText(text).then(() => {
-                showMessage('訊息已複製！請在 Messenger 中貼上', 'info');
-                // 開啟 Messenger 分享（會帶入連結預覽）
-                window.open(`fb-messenger://share/?link=${encodeURIComponent(link)}`, '_blank');
-                // 備用：如果 fb-messenger 協議不支援，2秒後開啟網頁版
-                setTimeout(() => {
-                    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(msg.short)}`, '_blank');
-                }, 500);
-            }).catch(() => {
-                // 直接開啟網頁版分享
-                window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(msg.short)}`, '_blank');
-            });
+            const { link, msg, text } = prepareForShare();
+            // 直接開啟網頁版分享
+            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(msg.short)}`, '_blank');
         }
 
         // 透過 Twitter 分享
         function shareViaTwitter() {
-            const link = getInviteLink();
-            const msg = getInviteMessage();
+            const { link, msg } = prepareForShare();
             const text = `${msg.title}\n${msg.short}\n\n加入遊戲👇`;
             window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`, '_blank');
         }
 
         // 透過 WhatsApp 分享
         function shareViaWhatsApp() {
-            const link = getInviteLink();
-            const msg = getInviteMessage();
-            const text = `${msg.title}\n\n${msg.description}\n${link}`;
+            const { text } = prepareForShare();
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
+
+        // ========== 連線監控功能 ==========
+
+        // 更新連線監控顯示
+        function updateConnectionMonitor() {
+            const pingDisplay = document.getElementById('pingDisplay');
+            const connectionCount = document.getElementById('connectionCount');
+            const connectionQuality = document.getElementById('connectionQuality');
+            const connectionMonitor = document.getElementById('connectionMonitor');
+
+            if (pingDisplay) pingDisplay.textContent = currentPing > 0 ? currentPing : '--';
+            if (connectionCount) connectionCount.textContent = connections.length;
+
+            // 連線品質指示
+            if (connectionQuality) {
+                if (currentPing > 0 && currentPing < 100) {
+                    connectionQuality.textContent = '(良好)';
+                    connectionQuality.style.color = '#27ae60';
+                } else if (currentPing >= 100 && currentPing < 300) {
+                    connectionQuality.textContent = '(普通)';
+                    connectionQuality.style.color = '#f39c12';
+                } else if (currentPing >= 300) {
+                    connectionQuality.textContent = '(較慢)';
+                    connectionQuality.style.color = '#e74c3c';
+                }
+            }
+
+            if (connectionMonitor) {
+                connectionMonitor.style.display = 'block';
+            }
+        }
+
+        // 開始連線監控
+        function startConnectionMonitoring() {
+            if (pingInterval) clearInterval(pingInterval);
+
+            pingInterval = setInterval(function() {
+                if (peer && peer.open && gameMode === 'online') {
+                    // 發送 ping 給所有連線
+                    const timestamp = Date.now();
+                    connections.forEach(function(conn) {
+                        if (conn && conn.open) {
+                            try {
+                                sendMessage(conn, { type: 'ping', timestamp: timestamp });
+                            } catch (e) {
+                                console.log('Ping 發送失敗:', e);
+                            }
+                        }
+                    });
+
+                    // 更新連線數量
+                    updateConnectionMonitor();
+
+                    // 檢查連線健康
+                    checkConnectionHealth();
+                }
+            }, 10000); // 每 10 秒檢查一次
+        }
+
+        // 停止連線監控
+        function stopConnectionMonitoring() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+            const connectionMonitor = document.getElementById('connectionMonitor');
+            if (connectionMonitor) connectionMonitor.style.display = 'none';
+        }
+
+        // 檢查連線健康狀態
+        function checkConnectionHealth() {
+            // 檢查 peer 連線狀態
+            if (peer && peer.disconnected && !peer.destroyed) {
+                connectionHealthy = false;
+                updateConnectionStatus('connecting', '重新連接中...');
+                peer.reconnect();
+            } else if (peer && peer.open) {
+                connectionHealthy = true;
+            }
         }
 
         // 檢查 URL 參數並自動加入房間
