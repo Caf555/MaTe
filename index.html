@@ -1465,14 +1465,15 @@
                 broadcastMessage({
                     type: 'cardSelection',
                     playerName: playerName,
-                    cards: myCards,
+                    cards: [...myCards],
                     action: action,
                     index: index
                 });
 
-                // 檢查是否完成SET
+                // 檢查是否完成SET - 立即捕獲卡片索引避免競態條件
                 if (myCards.length === 3) {
-                    setTimeout(() => checkSetOnline(playerName), 300);
+                    const capturedCards = [...myCards];
+                    setTimeout(() => checkSetOnlineWithCards(playerName, capturedCards), 300);
                 }
             } else {
                 // 客戶端發送給房主
@@ -1480,7 +1481,7 @@
                     sendMessage(conn, {
                         type: 'cardSelection',
                         playerName: playerName,
-                        cards: myCards,
+                        cards: [...myCards],
                         action: action,
                         index: index
                     });
@@ -1536,14 +1537,18 @@
             });
         }
 
-        // 線上模式檢查SET
-        function checkSetOnline(playerName) {
-            if (!playerSelectedCards[playerName] || playerSelectedCards[playerName].length !== 3) {
+        // 線上模式檢查SET（帶有預先捕獲的卡片索引）
+        function checkSetOnlineWithCards(playerName, cardIndices) {
+            if (!cardIndices || cardIndices.length !== 3) {
                 return;
             }
 
-            const cardIndices = playerSelectedCards[playerName];
             const cards = cardIndices.map(index => displayedCards[index]);
+
+            // 驗證卡片索引有效
+            if (cards.some(card => !card)) {
+                return;
+            }
 
             if (isSet(cards[0], cards[1], cards[2])) {
                 // 有效SET - 該玩家得分
@@ -1596,6 +1601,16 @@
             }
 
             updatePlayerDisplay();
+        }
+
+        // 線上模式檢查SET（從 playerSelectedCards 讀取）
+        function checkSetOnline(playerName) {
+            if (!playerSelectedCards[playerName] || playerSelectedCards[playerName].length !== 3) {
+                return;
+            }
+
+            const cardIndices = [...playerSelectedCards[playerName]];
+            checkSetOnlineWithCards(playerName, cardIndices);
         }
 
         // 清除所有玩家的選擇（僅清除線上玩家選擇狀態，不清除 selectedCards）
@@ -2534,9 +2549,10 @@
                             index: data.index
                         });
 
-                        // 檢查是否完成SET
+                        // 檢查是否完成SET - 使用已捕獲的卡片索引
                         if (data.cards && data.cards.length === 3) {
-                            setTimeout(() => checkSetOnline(data.playerName), 300);
+                            const capturedCards = [...data.cards];
+                            setTimeout(() => checkSetOnlineWithCards(data.playerName, capturedCards), 300);
                         }
                     }
                     break;
