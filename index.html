@@ -603,12 +603,16 @@
         @media (max-width: 430px) {
             html, body {
                 overflow-x: hidden;
+                overflow-y: auto;
                 width: 100%;
                 max-width: 100vw;
+                height: 100%;
             }
             body {
                 padding: 2px;
                 padding: max(2px, env(safe-area-inset-top)) max(2px, env(safe-area-inset-right)) max(2px, env(safe-area-inset-bottom)) max(2px, env(safe-area-inset-left));
+                min-height: 100vh;
+                min-height: -webkit-fill-available;
             }
             .container {
                 padding: 4px;
@@ -616,8 +620,38 @@
                 width: calc(100% - 4px);
                 max-width: calc(100vw - 8px);
                 margin: 0 auto;
-                overflow: hidden;
+                overflow-x: hidden;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
                 box-sizing: border-box;
+                max-height: none;
+                height: auto;
+                min-height: auto;
+            }
+            #setup {
+                max-height: none;
+                overflow: visible;
+            }
+            .network-setup {
+                max-height: none;
+                overflow: visible;
+                padding: 10px;
+                margin-top: 10px;
+            }
+            .network-setup.show {
+                display: block;
+                padding-bottom: 20px;
+            }
+            .connection-status {
+                max-height: none;
+                overflow: visible;
+            }
+            #shareButtons {
+                margin-bottom: 10px;
+            }
+            #gameSettingsOnline {
+                margin-top: 15px;
+                padding-top: 10px;
             }
             h1 {
                 font-size: 1em;
@@ -2572,47 +2606,67 @@
             return `${baseUrl}?room=${encodeURIComponent(roomId)}`;
         }
 
-        // 複製邀請連結
+        // 生成邀請訊息
+        function getInviteMessage() {
+            const roomId = document.getElementById('displayRoomId').textContent;
+            const shortRoomId = roomId.substring(0, 8);
+            return {
+                title: '🎮 SET 卡牌遊戲邀請',
+                description: `我正在玩 SET 卡牌配對遊戲，邀請你一起來挑戰！\n\n📋 遊戲說明：找出符合規則的三張卡片組合\n🎯 房間代碼：${shortRoomId}...\n\n👇 點擊下方連結直接加入遊戲：`,
+                short: `🎮 邀請你玩 SET 遊戲！房間：${shortRoomId}...`
+            };
+        }
+
+        // 複製邀請連結（含說明文字）
         function copyInviteLink() {
             const link = getInviteLink();
-            navigator.clipboard.writeText(link).then(() => {
-                showMessage('邀請連結已複製！分享給朋友即可加入', 'success');
+            const msg = getInviteMessage();
+            const fullText = `${msg.title}\n\n${msg.description}\n${link}`;
+
+            navigator.clipboard.writeText(fullText).then(() => {
+                showMessage('邀請訊息已複製！可直接貼上傳送給朋友', 'success');
             }).catch(() => {
                 // 備用方法
                 const textArea = document.createElement('textarea');
-                textArea.value = link;
+                textArea.value = fullText;
                 document.body.appendChild(textArea);
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                showMessage('邀請連結已複製！', 'success');
+                showMessage('邀請訊息已複製！', 'success');
             });
         }
 
         // 透過 LINE 分享
         function shareViaLine() {
             const link = getInviteLink();
-            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！\n點擊連結加入房間：${link}`);
+            const msg = getInviteMessage();
+            const text = encodeURIComponent(`${msg.title}\n\n${msg.description}\n${link}`);
             window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(link)}&text=${text}`, '_blank');
         }
 
         // 透過 Facebook 分享
         function shareViaFacebook() {
             const link = getInviteLink();
-            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`, '_blank');
+            const msg = getInviteMessage();
+            // Facebook 會自動抓取網頁標題，但我們可以加上 quote 參數
+            const quote = encodeURIComponent(`${msg.title} - ${msg.short}`);
+            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${quote}`, '_blank');
         }
 
         // 透過 Twitter 分享
         function shareViaTwitter() {
             const link = getInviteLink();
-            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！點擊連結加入房間：`);
+            const msg = getInviteMessage();
+            const text = encodeURIComponent(`${msg.title}\n${msg.short}\n\n加入遊戲👇`);
             window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(link)}`, '_blank');
         }
 
         // 透過 WhatsApp 分享
         function shareViaWhatsApp() {
             const link = getInviteLink();
-            const text = encodeURIComponent(`來和我一起玩 SET 遊戲！點擊連結加入房間：${link}`);
+            const msg = getInviteMessage();
+            const text = encodeURIComponent(`${msg.title}\n\n${msg.description}\n${link}`);
             window.open(`https://wa.me/?text=${text}`, '_blank');
         }
 
