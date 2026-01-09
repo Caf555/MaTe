@@ -1564,6 +1564,8 @@
 
                 // 廣播結果
                 if (isHost) {
+                    // 先廣播清除選擇，確保各平台同步清除
+                    broadcastMessage({ type: 'clearSelections' });
                     broadcastGameState();
                 }
 
@@ -1598,6 +1600,7 @@
 
         // 清除所有玩家的選擇
         function clearAllPlayerSelections() {
+            selectedCards = [];
             playerSelectedCards = {};
             activePlayers = {};
             updateOnlineCardDisplay();
@@ -2809,9 +2812,16 @@
             setsFound = state.setsFound;
             extraCardsShown = state.extraCardsShown;
 
+            // 清除選取狀態，確保各平台一致性
+            selectedCards = [];
+            playerSelectedCards = {};
+            activePlayers = {};
+
             updateCardGrid();
             updatePlayerDisplay();
             updateStats();
+            updateOnlineCardDisplay();
+            updateOnlinePlayerHighlight();
 
             // 如果遊戲結束，顯示結果
             if (state.gameEnded) {
