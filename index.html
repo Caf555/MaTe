@@ -1712,7 +1712,10 @@
             if (extraCardsShown) {
                 extraCardsShown = false;
             }
-            
+
+            // 清除選中狀態，避免新卡片被標記為已選中
+            selectedCards = [];
+
             updateCardGrid();
             updateCardCount();
         }
