@@ -2637,37 +2637,51 @@
             });
         }
 
-        // 透過 LINE 分享
+        // 透過 LINE 分享 (使用 line.me/R/share 可以傳送文字訊息)
         function shareViaLine() {
             const link = getInviteLink();
             const msg = getInviteMessage();
-            const text = encodeURIComponent(`${msg.title}\n\n${msg.description}\n${link}`);
-            window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(link)}&text=${text}`, '_blank');
+            // LINE 分享格式：文字 + 連結
+            const text = `${msg.title}\n\n${msg.description}\n${link}`;
+            // 使用 line.me/R/share 可以直接傳送文字訊息
+            window.open(`https://line.me/R/share?text=${encodeURIComponent(text)}`, '_blank');
         }
 
-        // 透過 Facebook 分享
+        // 透過 Facebook Messenger 分享
         function shareViaFacebook() {
             const link = getInviteLink();
             const msg = getInviteMessage();
-            // Facebook 會自動抓取網頁標題，但我們可以加上 quote 參數
-            const quote = encodeURIComponent(`${msg.title} - ${msg.short}`);
-            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${quote}`, '_blank');
+            const text = `${msg.title}\n\n${msg.description}\n${link}`;
+            // Facebook Messenger 使用 fb-messenger://share 協議
+            // 先複製訊息到剪貼簿，再開啟 Messenger
+            navigator.clipboard.writeText(text).then(() => {
+                showMessage('訊息已複製！請在 Messenger 中貼上', 'info');
+                // 開啟 Messenger 分享（會帶入連結預覽）
+                window.open(`fb-messenger://share/?link=${encodeURIComponent(link)}`, '_blank');
+                // 備用：如果 fb-messenger 協議不支援，2秒後開啟網頁版
+                setTimeout(() => {
+                    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(msg.short)}`, '_blank');
+                }, 500);
+            }).catch(() => {
+                // 直接開啟網頁版分享
+                window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}&quote=${encodeURIComponent(msg.short)}`, '_blank');
+            });
         }
 
         // 透過 Twitter 分享
         function shareViaTwitter() {
             const link = getInviteLink();
             const msg = getInviteMessage();
-            const text = encodeURIComponent(`${msg.title}\n${msg.short}\n\n加入遊戲👇`);
-            window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(link)}`, '_blank');
+            const text = `${msg.title}\n${msg.short}\n\n加入遊戲👇`;
+            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(link)}`, '_blank');
         }
 
         // 透過 WhatsApp 分享
         function shareViaWhatsApp() {
             const link = getInviteLink();
             const msg = getInviteMessage();
-            const text = encodeURIComponent(`${msg.title}\n\n${msg.description}\n${link}`);
-            window.open(`https://wa.me/?text=${text}`, '_blank');
+            const text = `${msg.title}\n\n${msg.description}\n${link}`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         }
 
         // 檢查 URL 參數並自動加入房間
