@@ -1598,9 +1598,8 @@
             updatePlayerDisplay();
         }
 
-        // 清除所有玩家的選擇
+        // 清除所有玩家的選擇（僅清除線上玩家選擇狀態，不清除 selectedCards）
         function clearAllPlayerSelections() {
-            selectedCards = [];
             playerSelectedCards = {};
             activePlayers = {};
             updateOnlineCardDisplay();
