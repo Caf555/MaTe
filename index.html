@@ -2035,6 +2035,18 @@
             resultHTML += `找到 ${setsFound} 個SET`;
             resultHTML += `</div>`;
 
+            // 線上模式：添加再來一場按鈕
+            if (gameMode === 'online') {
+                resultHTML += '<div style="margin-top: 20px;">';
+                if (isHost) {
+                    resultHTML += `<button onclick="restartOnlineGame()" style="background: #27ae60; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; cursor: pointer; margin-right: 10px;">🔄 再來一場</button>`;
+                } else {
+                    resultHTML += `<div style="color: #7f8c8d; font-size: 14px;">等待房主開始下一場...</div>`;
+                }
+                resultHTML += `<button onclick="resetGame()" style="background: #95a5a6; color: white; border: none; padding: 12px 30px; border-radius: 8px; font-size: 16px; cursor: pointer;">🚪 離開房間</button>`;
+                resultHTML += '</div>';
+            }
+
             resultHTML += '</div>';
 
             // 顯示在訊息區域
@@ -2508,6 +2520,11 @@
                     startOnlineGameForClient();
                     break;
 
+                case 'restartGame':
+                    // 重新開始遊戲（保持連線）
+                    restartOnlineGameForClient(data.deck);
+                    break;
+
                 case 'gameState':
                     // 同步遊戲狀態
                     syncGameState(data.state);
@@ -2763,6 +2780,116 @@
 
             // 廣播初始遊戲狀態
             broadcastGameState();
+        }
+
+        // 重新開始線上遊戲（保持連線）
+        function restartOnlineGame() {
+            if (!isHost) {
+                showMessage('只有房主可以開始新遊戲', 'error');
+                return;
+            }
+
+            // 重置訊息區域樣式
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = '';
+            messageDiv.textContent = '';
+            messageDiv.style.background = '';
+            messageDiv.style.border = '';
+            messageDiv.style.borderRadius = '';
+            messageDiv.style.padding = '';
+
+            // 重置遊戲狀態
+            displayedCards = [];
+            selectedCards = [];
+            playerSelectedCards = {};
+            activePlayers = {};
+            activePlayer = null;
+            extraCardsShown = false;
+            hintsUsed = 0;
+            setsFound = 0;
+
+            // 重置分數
+            players.forEach(player => {
+                scores[player] = 0;
+            });
+
+            // 重新生成牌組
+            generateDeck();
+
+            // 廣播重新開始
+            broadcastMessage({
+                type: 'restartGame',
+                deck: deck
+            });
+
+            // 發牌
+            dealCards(12);
+
+            // 重新啟動遊戲
+            gameStarted = true;
+
+            // 更新UI
+            document.getElementById('hintBtn').disabled = true;
+            document.getElementById('addCardsBtn').disabled = false;
+
+            updateCardGrid();
+            updatePlayerDisplay();
+            updateStats();
+            updateOnlineCardDisplay();
+            updateOnlinePlayerHighlight();
+
+            showMessage('新遊戲開始！', 'success');
+            checkForPossibleSets();
+
+            // 廣播初始遊戲狀態
+            broadcastGameState();
+        }
+
+        // 客戶端重新開始遊戲
+        function restartOnlineGameForClient(newDeck) {
+            // 重置訊息區域樣式
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = '';
+            messageDiv.textContent = '';
+            messageDiv.style.background = '';
+            messageDiv.style.border = '';
+            messageDiv.style.borderRadius = '';
+            messageDiv.style.padding = '';
+
+            // 重置遊戲狀態
+            displayedCards = [];
+            selectedCards = [];
+            playerSelectedCards = {};
+            activePlayers = {};
+            activePlayer = null;
+            extraCardsShown = false;
+            hintsUsed = 0;
+            setsFound = 0;
+            deck = newDeck;
+
+            // 重置分數
+            players.forEach(player => {
+                scores[player] = 0;
+            });
+
+            // 發牌
+            dealCards(12);
+
+            // 重新啟動遊戲
+            gameStarted = true;
+
+            // 更新UI
+            document.getElementById('hintBtn').disabled = true;
+            document.getElementById('addCardsBtn').disabled = false;
+
+            updateCardGrid();
+            updatePlayerDisplay();
+            updateStats();
+            updateOnlineCardDisplay();
+            updateOnlinePlayerHighlight();
+
+            showMessage('新遊戲開始！', 'success');
+            checkForPossibleSets();
         }
 
         // 客戶端開始遊戲
@@ -3074,7 +3201,8 @@
         window.shareViaTwitter = shareViaTwitter;
         window.shareViaWhatsApp = shareViaWhatsApp;
         window.startOnlineGame = startOnlineGame;
-        
+        window.restartOnlineGame = restartOnlineGame;
+
         // 點擊模態視窗外部關閉
         window.onclick = function(event) {
             const modal = document.getElementById('helpModal');
